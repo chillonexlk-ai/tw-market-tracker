@@ -1,0 +1,55 @@
+name: Auto Update Market Leading Indicators
+
+on:
+  schedule:
+    # 台灣時間 (UTC+8) 週一至週五 21:30 執行
+    # GitHub 伺服器使用 UTC 時間，換算為 13:30 (分 時 日 月 星期)
+    - cron: '30 13 * * 1-5'
+  # 支援在 GitHub 網頁端手動點擊「Run workflow」隨時觸發執行
+  workflow_dispatch:
+
+# 設定 GitHub Token 擁有 Git Push 權限，避免推回時被拒絕
+permissions:
+  contents: write
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 抓取當前 Repository 的程式碼與 Excel 檔
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. 安裝 Python 環境
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # 3. 安裝 requirements.txt 內的依賴套件
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 4. 執行爬蟲與寫入 Excel 腳本
+      - name: Execute Updater Script
+        run: |
+          python scripts/updater.py
+
+      # 5. 檢查是否有新數據，若有更動則自動 commit 並 push 回 Repo
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add 先行指標.xlsx
+          
+          # 檢查是否有檔案變動，避免無資料更新時報錯中斷
+          if git diff --staged --quiet; then
+            echo "No data changes detected. Skipping commit."
+          else
+            git commit -m "Auto-update leading indicators [$(date +'%Y-%m-%d')]"
+            git push
+          fi
